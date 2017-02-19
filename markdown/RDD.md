@@ -146,6 +146,7 @@ object HdfsWordCount {
 整个job先经过多个RDD的transformation操作，从textFile开始，textFile方法会new 一个hadoopRDD,然后通过flatMap操作变成MapPartitionsRDD，再经过map
 仍然是MapPartitionsRDD，在经过reduceByKey变成ShuffleRDD，最后通过foreach方法触发作业的执行。
 
+#####HadoopRDD
 我们首先看textFile的这个方法，进入SparkContext，找到该方法。
 
 ```java
@@ -250,6 +251,68 @@ class HadoopRDD[K, V](
 protected def getDependencies: Seq[Dependency[_]] = deps
 ```
 对于HadoopRDD来说，因为它是第一个RDD，所有没有前依赖，所以deps是空数组
+
+#####MapPartitionsRDD
+刚刚提到，HadoopRDD之后会调用map(pair => pair._2.toString)来获得value的值，然后我们程序中显示的调用了flatMap和map还有reduceByKey,最后调用foreach结束，
+因为map和flatMap都是使用的MapPartitionsRDD（在spark早期版本，flatMap和Map分别对应了两个RDD，一定程度上有代码的冗余，后面统一使用MapPartitionsRDD更简洁），
+reduceByKey则生成了ShuffleRDD。所以接下来看看MapPartitionsRDD：
+
+```java
+
+  /**
+   * Return a new RDD by applying a function to all elements of this RDD.
+   */
+  def map[U: ClassTag](f: T => U): RDD[U] = withScope {
+    val cleanF = sc.clean(f)
+    new MapPartitionsRDD[U, T](this, (context, pid, iter) => iter.map(cleanF))
+  }
+
+  /**
+   *  Return a new RDD by first applying a function to all elements of this
+   *  RDD, and then flattening the results.
+   */
+  def flatMap[U: ClassTag](f: T => TraversableOnce[U]): RDD[U] = withScope {
+    val cleanF = sc.clean(f)
+    new MapPartitionsRDD[U, T](this, (context, pid, iter) => iter.flatMap(cleanF))
+  }
+
+```
+如上，RDD中map和flatMap都是通过MapPartitionsRDD来进行计算的。最终的区别就是iter这个迭代器使用的是map还是flatMap计算。
+```java
+private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
+    var prev: RDD[T],
+    f: (TaskContext, Int, Iterator[T]) => Iterator[U],  // (TaskContext, partition index, iterator)
+    preservesPartitioning: Boolean = false)
+  extends RDD[U](prev) {
+
+  override val partitioner = if (preservesPartitioning) firstParent[T].partitioner else None
+
+  override def getPartitions: Array[Partition] = firstParent[T].partitions
+
+  override def compute(split: Partition, context: TaskContext): Iterator[U] =
+    f(context, split.index, firstParent[T].iterator(split, context))
+
+  override def clearDependencies() {
+    super.clearDependencies()
+    prev = null
+  }
+}
+```
+很简单，getPartitions通过获取第一个父RDD的Partitions来作为自己的partitions。
+
+getDependencies:注意到该类的构造函数，extends RDD[U] (prev)调用超类构造函数：
+```java
+  def this(@transient oneParent: RDD[_]) =
+    this(oneParent.context, List(new OneToOneDependency(oneParent)))
+```
+可以看到，把传过来的RDD构造一个OneToOneDependency,也就是说，MapPartitionsRDD的依赖是一个OneToOneDependency，并且它的父依赖是HadoopRDD。
+从demo中，依赖关系可以看到是HadoopRDD<--MapPartitionsRDD<--MapPartitionsRDD<--MapPartitionsRDD,因为有三个MapPartitionsRDD操作。
+
+Partitoner：如果preservesPartitioning设置为true，使用第一个RDD的partitioner，否则就是None
+
+Compute: compute就是将前面一个RDD的Iterator调用f函数计算一下。
+
+#####reduceByKey
 
 
 
