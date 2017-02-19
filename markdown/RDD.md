@@ -22,7 +22,6 @@ transformation和action两大类。
 | filter(func) | 对每个元素进行func的计算，结果为true的元素得到保存，然后返回一个新的RDD |
 | mapPartitions(func) | 和map类似，但是它是对partition为单位进行计算 |
 | mapPartitionsWithIndex(func) |和mapPartitions类似，但是对每个partition进行了索引 |
-| map(func) | 对每个元素进行func的计算，然后返回一个新的RDD |
 | sample(withReplacement, fraction, seed)| 对一个集合的取样操作，第一个参数运行结果是否重复，第二是生成集合的大小，第三个是随机种子 |
 | union(otherDataset) | 与另一个RDD进行合并操作 |
 | intersection(otherDataset) | 与另外一个RDD取交集|
@@ -56,4 +55,204 @@ transformation和action两大类。
 | foreach(func)| 对每个元素进行func的操作常用来和外部存储系统打交道 |
 
 
-##主要内容
+
+## RDD demos
+#####demo1
+
+textFile、map、flatMap、filter、reduceByKey、foreach、sortByKey、takeOrdered
+``` java
+val file = sc.textFile(args(0))       //如果是本地文件：file:///home/xxx/xxx
+val result = file.flatMap(_.split(" ")).filter(s => s.length>10).map(x => (x, 1)).reduceByKey(_ + _).cache()
+result.foreach{x => println(x._1 + " " + x._2)}
+val sorted=result.map{ case(key,value)=>(value,key)}.sortByKey(true,1)
+val topk=sorted.top(10)
+//sorted.takeOrdered(10)(Ordering[Int].reverse.on(x=>x._1))
+topk.foreach(println)
+```
+
+#####demo2
+parallelize、cartesian、collect、foreach、coalesce、parallelize、sample、join、cogroup、union、pipe
+```java
+//求笛卡尔积
+val x = sc.parallelize(List(1, 2, 3, 4, 5))
+val y = sc.parallelize(List(6, 7, 8, 9, 10))
+val cartesian = x.cartesian(y)
+cartesian.foreach(println)
+//求交集
+val intersection = x.intersection(y)
+intersection.foreach(println)
+
+//重分区
+val t = sc.parallelize(1 to 100, 10)
+println(t.partitions.size)
+val coalesce = t.coalesce(2, true)
+//val coalesce = y.coalesce(12, false)  //无效
+val repartition = y.repartition(12);
+println(coalesce.partitions.size)
+println(repartition.partitions.size)
+
+//去重
+val distinct = t.distinct(2);
+distinct.collect().foreach(println)
+
+//sample
+val sample = t.sample(false, 0.2, 0)
+sample.collect.foreach(x => print(x + " "))
+
+//pipe
+//val pipe = t.pipe("head -n 2")  //window下执行不了
+
+//union
+val union = x.union(y)
+union.foreach(print)
+//count
+println(sample.count)
+//cogroup
+val d = x.map((_, "b"))
+val e = y.map((_, "c"))
+val cogroup = d.cogroup(e)
+cogroup.foreach(println)
+//join
+val data1 = Array[(Int, Char)]((1, 'a'), (2, 'b'), (3, 'c'), (4, 'd'), (5, 'e'), (3, 'f'), (2, 'g'), (1, 'h'))
+val pairs1 = sc.parallelize(data1, 3)
+val data2 = Array[(Int, Char)]((1, 'A'), (2, 'B'), (3, 'C'), (4, 'D'))
+val pairs2 = sc.parallelize(data2, 2)
+val result = pairs1.join(pairs2)
+result.foreach(x=>println(x._1, x._2))
+
+```
+
+## one demo
+
+通过一个实例来讲讲RDD内部情况
+``` java
+import org.apache.spark._
+
+object HdfsWordCount {
+ def main(args: Array[String]) {
+    if (args.length < 1) {
+      System.err.println("Usage: HdfsTest <file>")
+      System.exit(1)
+    }
+    val sparkConf = new SparkConf().setAppName("HdfsTest").setMaster("local")
+    val sc = new SparkContext(sparkConf)
+    val file = sc.textFile(args(0))       //如果是本地文件：file:///home/xxx/xxx
+    val result = file.flatMap(_.split(" ")).map(x => (x, 1)).reduceByKey(_ + _).cache()
+    result.foreach{x => println(x._1 + " " + x._2)}
+    sc.stop()
+  }
+}
+```
+整个job先经过多个RDD的transformation操作，从textFile开始，textFile方法会new 一个hadoopRDD,然后通过flatMap操作变成MapPartitionsRDD，再经过map
+仍然是MapPartitionsRDD，在经过reduceByKey变成ShuffleRDD，最后通过foreach方法触发作业的执行。
+
+我们首先看textFile的这个方法，进入SparkContext，找到该方法。
+
+```java
+  def textFile(
+      path: String,
+      minPartitions: Int = defaultMinPartitions): RDD[String] = withScope {
+    assertNotStopped()
+    hadoopFile(path, classOf[TextInputFormat], classOf[LongWritable], classOf[Text],
+      minPartitions).map(pair => pair._2.toString).setName(path)
+  }
+
+```
+不难发现：传给hadoopFile方法的前四个参数：path,TextInputFormat,LongWritable,Text和我们写mapreduce程序类似。
+
+通过hadoopFile函数，首先会new一个hadoopRDD，紧接着调用了map方法（MapPartitionsRDD）并吧<k,v>的第二个v值输出。其实此处的<k,v>就是通过hadoop的
+TextFileInputFormat的recordReader的getNext()方法不断的生成k:行数、v:改行数据。接着hadoopFile方法中new了一个HadoopRDD,接下来看看。
+
+还是从上述的5个方面来看HadoopRDD:compute、getPartitions、getDependencies、getPreferredLocations、partitioner。
+
+ **getPartitions**
+
+```java
+  override def getPartitions: Array[Partition] = {
+    val inputFormat = getInputFormat(jobConf)
+    val inputSplits = inputFormat.getSplits(jobConf, minPartitions)
+    val array = new Array[Partition](inputSplits.size)
+    for (i <- 0 until inputSplits.size) {
+      array(i) = new HadoopPartition(id, i, inputSplits(i))
+    }
+    array
+  }
+```
+核心代码如上，首先利用了反射技术获得TextInputFormat实例，然后通过FileInputFormat的getSplit方法获取splits，最后将split数组进行了包装，返回HadoopPartition.
+
+**compute**
+
+```java
+private val split = theSplit.asInstanceOf[HadoopPartition]
+     
+      private val jobConf = getJobConf()
+      private val existingBytesRead = inputMetrics.bytesRead
+      private var reader: RecordReader[K, V] = null
+      private val inputFormat = getInputFormat(jobConf)
+
+      reader =
+        try {
+          inputFormat.getRecordReader(split.inputSplit.value, jobConf, Reporter.NULL)
+        } catch {
+          case e: IOException if ignoreCorruptFiles =>
+            logWarning(s"Skipped the rest content in the corrupted file: ${split.inputSplit}", e)
+            finished = true
+            null
+        }
+      // Register an on-task-completion callback to close the input stream.
+      context.addTaskCompletionListener{ context => closeIfNeeded() }
+      private val key: K = if (reader == null) null.asInstanceOf[K] else reader.createKey()
+      private val value: V = if (reader == null) null.asInstanceOf[V] else reader.createValue()
+
+      override def getNext(): (K, V) = {
+        try {
+          finished = !reader.next(key, value)
+        } catch {
+          case e: IOException if ignoreCorruptFiles =>
+            logWarning(s"Skipped the rest content in the corrupted file: ${split.inputSplit}", e)
+            finished = true
+        }
+        if (!finished) {
+          inputMetrics.incRecordsRead(1)
+        }
+        if (inputMetrics.recordsRead % SparkHadoopUtil.UPDATE_INPUT_METRICS_INTERVAL_RECORDS == 0) {
+          updateBytesRead()
+        }
+        (key, value)
+      }
+
+```
+核心代码如上，可以看到，compute是如何获取数据的，每个partition到compute函数，先获取inputFormat实例，然后通过RecordReader进行实际数据的读写，
+然后上层调度框架不断getNext方法来获得<k,v>的数据。
+**partitioner**
+partitioner没有覆盖RDD抽象类，所以是None
+**getPreferredLocations**
+```
+locs.getOrElse(hsplit.getLocations.filter(_ != "localhost"))
+```
+返回InputSplit返回localtion信息。
+
+**getDependencies**
+``` java
+class HadoopRDD[K, V](
+    sc: SparkContext,
+    broadcastedConf: Broadcast[SerializableConfiguration],
+    initLocalJobConfFuncOpt: Option[JobConf => Unit],
+    inputFormatClass: Class[_ <: InputFormat[K, V]],
+    keyClass: Class[K],
+    valueClass: Class[V],
+    minPartitions: Int)
+  extends RDD[(K, V)](sc, Nil) with Logging {
+
+```
+首先hadoopRDD会调用父类构造器，将空的List传给抽象类RDD，这样getDependencies返回改数组
+```
+protected def getDependencies: Seq[Dependency[_]] = deps
+```
+对于HadoopRDD来说，因为它是第一个RDD，所有没有前依赖，所以deps是空数组
+
+
+
+## RDD之间联系
+
+
