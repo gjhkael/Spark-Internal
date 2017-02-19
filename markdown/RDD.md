@@ -23,5 +23,37 @@ transformation和action两大类。
 | mapPartitions(func) | 和map类似，但是它是对partition为单位进行计算 |
 | mapPartitionsWithIndex(func) |和mapPartitions类似，但是对每个partition进行了索引 |
 | map(func) | 对每个元素进行func的计算，然后返回一个新的RDD |
+| sample(withReplacement, fraction, seed)| 对一个集合的取样操作，第一个参数运行结果是否重复，第二是生成集合的大小，第三个是随机种子 |
+| union(otherDataset) | 与另一个RDD进行合并操作 |
+| intersection(otherDataset) | 与另外一个RDD取交集|
+| distinct([numTasks])) | 返回去重后的RDD， numTasks是生成RDD的partition个数，不设采用RDD中partitions.length |
+| groupByKey([numTasks]) | 按key进行聚合操作，<k,v> ==> <k,Iterable<V>> |
+| reduceByKey(func, [numTasks]) | 按key进行reduce操作，<k,v> ==> <k,V> v通过func算出来|
+| aggregateByKey(zeroValue)(seqOp, combOp, [numTasks]) | |
+| sortByKey([ascending], [numTasks]) | 按key进行排序，<k,v> ==> <k,V>|
+| join(otherDataset, [numTasks]) | 与另外一个RDD进行Join操作  |
+| cogroup(otherDataset, [numTasks]) | 与另外一个RDD进行按key聚合<k,v> <k,u> ==> <k,(Iterable<V>, Iterable<W>)> |
+| cartesian(otherDataset) | 笛卡尔积操作 k, u => <k,u> |
+| pipe(command, [envVars]) | 每个partition经过一个shell command操作返回新的RDD |
+| coalesce(numPartitions) | 对RDD进行重新分区，主要用来减少分区，默认不开启shuffle|
+| repartition(numPartitions) |对RDD进行重新分区，一种特殊coalesce，开启shuffle|
+| repartitionAndSortWithinPartitions(partitioner)  | 重分区并且按key进行了排序 |
+
+
+| Action | Meaning |
+|:-----------|:-------------|
+| reduce(func) | |
+| collect() | 对上一个RDD的元素返回一个集合 |
+| count()| 求和 |
+| first() | 返回第一个元素 |
+| take(n) | 返回地n个元素 |
+| takeSample(withReplacement, num, [seed]) | 对结果进行取样返回 |
+| takeOrdered(n, [ordering]) | 返回前n，并且这些数据是排好序的 |
+| saveAsTextFile(path) | 将结果保存到一个路径 |
+| saveAsSequenceFile(path)  | 以Hadoop SequenceFile文件形式存储文件  |
+| saveAsObjectFile(path)  | 保存java序列化后的数据，可以配合 SparkContext.objectFile()使用  |
+| countByKey()| 对key进行求和，<k,v> ==> <k, count> |
+| foreach(func)| 对每个元素进行func的操作常用来和外部存储系统打交道 |
+
 
 ##主要内容
