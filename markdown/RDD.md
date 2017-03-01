@@ -225,8 +225,11 @@ private val split = theSplit.asInstanceOf[HadoopPartition]
 ```
 核心代码如上，可以看到，compute是如何获取数据的，每个partition到compute函数，先获取inputFormat实例，然后通过RecordReader进行实际数据的读写，
 然后上层调度框架不断getNext方法来获得<k,v>的数据。
+
 **partitioner**
+
 partitioner没有覆盖RDD抽象类，所以是None
+
 **getPreferredLocations**
 ```
 locs.getOrElse(hsplit.getLocations.filter(_ != "localhost"))
