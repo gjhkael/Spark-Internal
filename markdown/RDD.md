@@ -26,7 +26,7 @@ transformation和action两大类。
 | union(otherDataset) | 与另一个RDD进行合并操作 |
 | intersection(otherDataset) | 与另外一个RDD取交集|
 | distinct([numTasks])) | 返回去重后的RDD， numTasks是生成RDD的partition个数，不设采用RDD中partitions.length |
-| groupByKey([numTasks]) | 按key进行聚合操作，< k,v > ==>  < k,Iterable < V > > |
+| groupByKey([numTasks]) | 按key进行聚合操作，“< k,v > ==>  < k,Iterable < V > >” |
 | reduceByKey(func, [numTasks]) | 按key进行reduce操作，<k,v> ==> <k,V> v通过func算出来|
 | aggregateByKey(zeroValue)(seqOp, combOp, [numTasks]) | |
 | sortByKey([ascending], [numTasks]) | 按key进行排序，<k,v> ==> <k,V>|
