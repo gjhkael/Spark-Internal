@@ -18,7 +18,7 @@ transformation和action两大类。
 | Transformation | Meaning |
 |:-----------|:-------------|
 | map(func) | 对每个元素进行func的计算，然后返回一个新的RDD |
-| flatMap(func) | 对每个元素进行func的计算，然后返回一个新的RDD 与map的不同之处是返回的计算结果不一样 |
+| flatMap(func) | 对每个元素进行func的计算，然后返回一个新的RDD 与map的不同之处返回的结果集合类型不一样 |
 | filter(func) | 对每个元素进行func的计算，结果为true的元素得到保存，然后返回一个新的RDD |
 | mapPartitions(func) | 和map类似，但是它是对partition为单位进行计算 |
 | mapPartitionsWithIndex(func) |和mapPartitions类似，但是对每个partition进行了索引 |
