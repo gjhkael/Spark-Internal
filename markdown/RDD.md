@@ -317,6 +317,55 @@ Compute: compute就是将前面一个RDD的Iterator调用f函数计算一下。
 
 ###reduceByKey
 
+reduceBykey在PairRDDFunctions类里面，RDD里面的方法通过隐式转换得到
+```
+  def reduceByKey(partitioner: Partitioner, func: (V, V) => V): RDD[(K, V)] = self.withScope {
+    combineByKeyWithClassTag[V]((v: V) => v, func, func, partitioner)
+  }
+```
+
+reduceByKey最终调用
+```
+def combineByKeyWithClassTag[C](
+      createCombiner: V => C,
+      mergeValue: (C, V) => C,
+      mergeCombiners: (C, C) => C,
+      partitioner: Partitioner,
+      mapSideCombine: Boolean = true,
+      serializer: Serializer = null)(implicit ct: ClassTag[C]): RDD[(K, C)] = self.withScope {
+    require(mergeCombiners != null, "mergeCombiners must be defined") // required as of Spark 0.9.0
+    if (keyClass.isArray) {
+      if (mapSideCombine) {
+        throw new SparkException("Cannot use map-side combining with array keys.")
+      }
+      if (partitioner.isInstanceOf[HashPartitioner]) {
+        throw new SparkException("HashPartitioner cannot partition array keys.")
+      }
+    }
+    val aggregator = new Aggregator[K, V, C](
+      self.context.clean(createCombiner),
+      self.context.clean(mergeValue),
+      self.context.clean(mergeCombiners))
+    if (self.partitioner == Some(partitioner)) {
+      self.mapPartitions(iter => {
+        val context = TaskContext.get()
+        new InterruptibleIterator(context, aggregator.combineValuesByKey(iter, context))
+      }, preservesPartitioning = true)
+    } else {
+      new ShuffledRDD[K, V, C](self, partitioner)
+        .setSerializer(serializer)
+        .setAggregator(aggregator)
+        .setMapSideCombine(mapSideCombine)
+    }
+  }
+```
+解释一下什么函数：首先mergeCombiners必须不为空，也就是（c,v）=> c函数不为空，其次对createCombiner等参数进行clean操作，清除不能序列化的数据。
+最后，如果当前的partitioner存在的话，进行mapPartitions操作，如果partitioner不存在的话，进行ShuffledRDD操作，其中将Partitioner（默认是基于Hash）传递给ShuffledRDD.
+
+接下来看一下ShuffleRDD
+
+**ShuffleRDD**
+
 
 
 ## RDD之间联系
