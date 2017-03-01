@@ -318,14 +318,14 @@ Compute: compute就是将前面一个RDD的Iterator调用f函数计算一下。
 ###reduceByKey
 
 reduceBykey在PairRDDFunctions类里面，RDD里面的方法通过隐式转换得到
-```
+``` java
   def reduceByKey(partitioner: Partitioner, func: (V, V) => V): RDD[(K, V)] = self.withScope {
     combineByKeyWithClassTag[V]((v: V) => v, func, func, partitioner)
   }
 ```
 
 reduceByKey最终调用
-```
+``` java
 def combineByKeyWithClassTag[C](
       createCombiner: V => C,
       mergeValue: (C, V) => C,
@@ -367,7 +367,7 @@ def combineByKeyWithClassTag[C](
 ### ShuffleRDD
 从上面combineByKeyWithClassTag方法可以看到，new ShuffleRDD的时候，设置了setMapSideCombine，也就是说，map端会先进行按key合并计算的操作，设置了setAggregator
 聚合器进行聚合操作,如下：
-```
+``` java
 class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
     @transient var prev: RDD[_ <: Product2[K, V]],
     part: Partitioner)
