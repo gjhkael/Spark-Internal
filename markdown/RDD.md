@@ -27,12 +27,12 @@ transformation和action两大类。
 | intersection(otherDataset) | 与另外一个RDD取交集|
 | distinct([numTasks])) | 返回去重后的RDD， numTasks是生成RDD的partition个数，不设采用RDD中partitions.length |
 | groupByKey([numTasks]) | 按key进行聚合操作，< k,v > ==>  < k,Iterable < V > > |
-| reduceByKey(func, [numTasks]) | 按key进行reduce操作，<k,v> ==> <k,V> v通过func算出来|
+| reduceByKey(func, [numTasks]) | 按key进行reduce操作，< k,v > ==> < k,V > v通过func算出来|
 | aggregateByKey(zeroValue)(seqOp, combOp, [numTasks]) | |
-| sortByKey([ascending], [numTasks]) | 按key进行排序，<k,v> ==> <k,V>|
+| sortByKey([ascending], [numTasks]) | 按key进行排序，< k,v > ==> < k,V >|
 | join(otherDataset, [numTasks]) | 与另外一个RDD进行Join操作  |
-| cogroup(otherDataset, [numTasks]) | 与另外一个RDD进行按key聚合<k,v> <k,u> ==> <k,(Iterable<V>, Iterable<W>)> |
-| cartesian(otherDataset) | 笛卡尔积操作 k, u => <k,u> |
+| cogroup(otherDataset, [numTasks]) | 与另外一个RDD进行按key聚合< k,v > < k,u > ==> < k,(Iterable< V >, Iterable< W >) > |
+| cartesian(otherDataset) | 笛卡尔积操作 k, u => < k,u > |
 | pipe(command, [envVars]) | 每个partition经过一个shell command操作返回新的RDD |
 | coalesce(numPartitions) | 对RDD进行重新分区，主要用来减少分区，默认不开启shuffle|
 | repartition(numPartitions) |对RDD进行重新分区，一种特殊coalesce，开启shuffle|
