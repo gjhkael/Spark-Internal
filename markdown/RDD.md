@@ -365,7 +365,92 @@ def combineByKeyWithClassTag[C](
 接下来看一下ShuffleRDD
 
 ### ShuffleRDD
+从上面combineByKeyWithClassTag方法可以看到，new ShuffleRDD的时候，设置了setMapSideCombine，也就是说，map端会先进行按key合并计算的操作，设置了setAggregator
+聚合器进行聚合操作,如下：
+```
+class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
+    @transient var prev: RDD[_ <: Product2[K, V]],
+    part: Partitioner)
+  extends RDD[(K, C)](prev.context, Nil) {
 
+  /** Set a serializer for this RDD's shuffle, or null to use the default (spark.serializer) */
+  def setSerializer(serializer: Serializer): ShuffledRDD[K, V, C] = {
+    this.userSpecifiedSerializer = Option(serializer)
+    this
+  }
+
+  /** Set key ordering for RDD's shuffle. */
+  def setKeyOrdering(keyOrdering: Ordering[K]): ShuffledRDD[K, V, C] = {
+    this.keyOrdering = Option(keyOrdering)
+    this
+  }
+
+  /** Set aggregator for RDD's shuffle. */
+  def setAggregator(aggregator: Aggregator[K, V, C]): ShuffledRDD[K, V, C] = {
+    this.aggregator = Option(aggregator)
+    this
+  }
+
+  /** Set mapSideCombine flag for RDD's shuffle. */
+  def setMapSideCombine(mapSideCombine: Boolean): ShuffledRDD[K, V, C] = {
+    this.mapSideCombine = mapSideCombine
+    this
+  }
+
+  override def getDependencies: Seq[Dependency[_]] = {
+    val serializer = userSpecifiedSerializer.getOrElse {
+      val serializerManager = SparkEnv.get.serializerManager
+      if (mapSideCombine) {
+        serializerManager.getSerializer(implicitly[ClassTag[K]], implicitly[ClassTag[C]])
+      } else {
+        serializerManager.getSerializer(implicitly[ClassTag[K]], implicitly[ClassTag[V]])
+      }
+    }
+    List(new ShuffleDependency(prev, part, serializer, keyOrdering, aggregator, mapSideCombine))
+  }
+
+  override val partitioner = Some(part)
+
+  override def getPartitions: Array[Partition] = {
+    Array.tabulate[Partition](part.numPartitions)(i => new ShuffledRDDPartition(i))
+  }
+
+  override protected def getPreferredLocations(partition: Partition): Seq[String] = {
+    val tracker = SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+    val dep = dependencies.head.asInstanceOf[ShuffleDependency[K, V, C]]
+    tracker.getPreferredLocationsForShuffle(dep, partition.index)
+  }
+
+  override def compute(split: Partition, context: TaskContext): Iterator[(K, C)] = {
+    val dep = dependencies.head.asInstanceOf[ShuffleDependency[K, V, C]]
+    SparkEnv.get.shuffleManager.getReader(dep.shuffleHandle, split.index, split.index + 1, context)
+      .read()
+      .asInstanceOf[Iterator[(K, C)]]
+  }
+
+
+}
+
+```
+
+仍然从5个方面进行分析：
+
+**getDependencies**
+
+
+**partitioner**
+
+partitioner是reducebykey穿给他的基于hash的partitioner
+
+**getPreferredLocations**
+
+
+**compute**
+
+
+**getPartitions**
+
+part.numPartitions的数量是从reduceByKey中new一个defaultPartioner获得，默认是“spark.default.parallelism”
 
 
 ## RDD之间联系
