@@ -435,22 +435,28 @@ class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
 
 仍然从5个方面进行分析：
 
+仍然从5个方面进行分析：
+
 **getDependencies**
 
+直接new了一个shuffleDependency(),穿了各种参数。
 
 **partitioner**
 
-partitioner是reducebykey穿给他的基于hash的partitioner
+partitioner是reducebykey穿给他的基于hash的partitioner。
 
 **getPreferredLocations**
 
+MapOutputTrackerMaster会保存map的输出信息，这里通过MapOutputTrackerMaster来获取map的输出位置信息。
 
 **compute**
 
+SparkEnv.get.shuffleManager.getReader，通过shuffleManager get到Shuffle reader从map端将数据拉到reduce端。
 
 **getPartitions**
 
-part.numPartitions的数量是从reduceByKey中new一个defaultPartioner获得，默认是“spark.default.parallelism”
+part.numPartitions的数量是从reduceByKey中new一个defaultPartioner获得，默认是“spark.default.parallelism” 。
+
 
 
 ## RDD之间联系
