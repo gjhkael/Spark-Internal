@@ -34,7 +34,7 @@ transformation和action两大类。
 | cogroup(otherDataset, [numTasks]) | 与另外一个RDD进行按key聚合< k,v > < k,u > ==> < k,(Iterable< V >, Iterable< W >) > |
 | cartesian(otherDataset) | 笛卡尔积操作 k, u => < k,u > |
 | pipe(command, [envVars]) | 每个partition经过一个shell command操作返回新的RDD |
-| coalesce(numPartitions) | 对RDD进行重新分区，主要用来减少分区，默认不开启shuffle|
+| coalesce(numPartitions,shuffle) | 对RDD进行重新分区，主要用来减少分区，默认不开启shuffle|
 | repartition(numPartitions) |对RDD进行重新分区，一种特殊coalesce，开启shuffle|
 | repartitionAndSortWithinPartitions(partitioner)  | 重分区并且按key进行了排序 |
 
